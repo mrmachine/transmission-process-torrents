@@ -1,0 +1,2 @@
+-e git+https://github.com/mrmachine/finder_colors.git@xattr-import#egg=finder_colors
+-e .

@@ -1,0 +1,27 @@
+# Copy this file to `~/.config/transmission-process-torrents/config.yaml` and
+# edit to suit your needs.
+
+# If Transmission is running on a different host, specify the host and port.
+transmission_host: freebsd.fritz.box
+# transmission_port: 9091
+
+# When Transmission is running on a remote host, the download directory
+# returned by the RPC interface will be a remote path. This script needs to map
+# it to a corresponding local path, so it can hard link downloaded files to the
+# post processing directory.
+mapped_remote_paths:
+  /mnt/pool/dataset/: /Volumes/dataset/
+
+# Each torrent directory has its own configuration. Both `download_dir` and
+# `post_processing_dir` are required, while `ratio` and `seed_days` are
+# optional. A torrent will not be considered active and consequently not
+# eligible for removal until both `ratio` and `seed_days` criterion have been
+# satisfied. If neither are specified, a torrent will be removed as soon as it
+# has been processed.
+torrent_dirs:
+  - download_dir: /Volumes/dataset/Torrents/Movies
+    post_processing_dir: /Volumes/dataset/Downloads/complete/Movies
+    ratio: 2
+  - download_dir: /Volumes/dataset/Torrents/TV Shows
+    post_processing_dir: /Volumes/dataset/Downloads/complete/TV Shows
+    seed_days: 6
