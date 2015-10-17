@@ -101,11 +101,14 @@ def process_torrents(
             if absolute_path.startswith(download_dir):
                 found_torrents.add(absolute_path)
 
-                # Assume already processed if a color label is set.
-                processed = bool(finder_colors.get(absolute_path) != 'none')
-
                 # Get downloaded and seeding status.
                 downloaded = bool(torrent['percentDone'] == 1)
+
+                # Assume already processed if a color label is set.
+                processed = bool(
+                    downloaded and finder_colors.get(absolute_path) != 'none')
+
+                # Get seeding status.
                 seeding = bool(
                     ratio and
                     ratio > torrent['uploadRatio'] or
