@@ -50,7 +50,9 @@ def hardlink(src, dst, force=False):
             err('hardlink: %s: Cannot replace file with directory' % dst)
         cwd = os.getcwd()
         os.chdir(src)
-        for local, dirs, files in os.walk('.', followlinks=True):
+        # Pass a unicode path to `os.walk` to get unicode values back for
+        # `local`, `dirs` and `files`.
+        for local, dirs, files in os.walk(u'.', followlinks=True):
             # Directories.
             for d in dirs:
                 dstpath = os.path.abspath(os.path.join(dst, local, d))
