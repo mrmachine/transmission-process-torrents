@@ -27,7 +27,7 @@ DAY_SECONDS = datetime.timedelta(days=1).total_seconds()
 
 
 def err(stderr):
-    sys.stderr.write('%s\n' % stderr.strip())
+    sys.stderr.write('process-torrents: %s\n' % stderr.strip())
     exit(1)
 
 
@@ -121,13 +121,12 @@ def process_torrents(config_path=CONFIG_PATH, dry_run=False, verbosity=0):
         with open(config_path) as file:
             config = yaml.load(file.read())
     except Exception:
-        err('Error: Unable to load config: %s' % config_path)
+        err('Unable to load config: %s' % config_path)
 
     # Get Transmission client.
-    client = transmission.Transmission(
-        host=config.get('transmission_host', 'localhost'),
-        port=config.get('transmission_port', 9091),
-    )
+    host = config.get('transmission_host', 'localhost')
+    port = config.get('transmission_port', 9091)
+    client = transmission.Transmission(host=host, port=port)
 
     # Get torrents from Transmission.
     try:
@@ -140,7 +139,7 @@ def process_torrents(config_path=CONFIG_PATH, dry_run=False, verbosity=0):
             'uploadRatio',
         ])['torrents']
     except requests.ConnectionError:
-        err('Error: Unable to connect to Transmission')
+        err('Unable to connect to Transmission at %s:%s' % (host, port))
 
     # Store torrents found in a known torrents directory for later processing.
     found_torrents = set()
