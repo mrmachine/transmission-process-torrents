@@ -14,7 +14,7 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts': [
-            'hardlink = hardlink:hardlink',
+            'hardlink = hardlink:main',
             'process-torrents = process_torrents:main',
         ],
     },

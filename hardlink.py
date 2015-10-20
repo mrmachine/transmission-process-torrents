@@ -4,116 +4,217 @@ Recursively hard link a source file or directory to a destination. Useful on
 OS X, which doesn't support `cp -lR`.
 """
 
+import argparse
 import errno
+import logging
 import os
+import shutil
 import sys
 
-
-def err(stderr):
-    sys.stderr.write('%s\n' % stderr.strip())
-    exit(1)
+logging.basicConfig(format='%(message)s')
+logger = logging.getLogger(__name__)
 
 
-def makedirs(path):
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        # Check if any intermediate path is a file. Don't complain if the
-        # directory already exists.
-        if e.errno not in (errno.EEXIST, errno.ENOTDIR):
-            raise
-        if not os.path.isdir(path):
-            bits = os.path.split(path)
-            bitpath = ''
-            for bit in bits:
-                bitpath = os.path.join(bitpath, bit)
-                if not os.path.isdir(bitpath):
-                    warn('hardlink: %s: Cannot replace file with directory' %
-                         bitpath)
-        return False
-    return True
+class Command(object):
 
+    def __init__(self, dry_run=False, force=False):
+        self.dry_run = dry_run
+        self.force = force
+        self._created_dirs = set()
+        self._removed = set()
 
-def hardlink(src, dst, force=False):
-    src = os.path.abspath(src)
-    dst = os.path.abspath(dst)
+    def __call__(self, src, dst):
+        src = os.path.abspath(src)
+        logger.debug('Source: %s' % src)
 
-    # Validate source.
-    if not os.path.exists(src):
-        err('hardlink: %s: No such file or directory' % src)
+        dst = os.path.abspath(dst)
+        logger.debug('Destination: %s' % dst)
 
-    # Merge directories, link files, overwrite existing files. We don't want to
-    # leak hard links outside the destination. Replace directory symlinks with
-    # directories, and file symlinks with hard links.
-    if os.path.isdir(src):
-        if os.path.isfile(dst):
-            err('hardlink: %s: Cannot replace file with directory' % dst)
-        cwd = os.getcwd()
-        os.chdir(src)
-        # Pass a unicode path to `os.walk` to get unicode values back for
-        # `local`, `dirs` and `files`.
-        for local, dirs, files in os.walk(u'.', followlinks=True):
-            # Directories.
-            for d in dirs:
-                dstpath = os.path.abspath(os.path.join(dst, local, d))
-                if os.path.isdir(dstpath) and os.path.islink(dstpath):
-                    os.remove(dstpath)
-                makedirs(dstpath)
-            # Files.
-            for f in files:
-                srcfile = os.path.realpath(
-                    os.path.abspath(os.path.join(local, f)))
-                dstfile = os.path.abspath(os.path.join(dst, local, f))
-                if not os.path.exists(srcfile):
-                    warn('hardlink: %s: No such file or directory' % srcfile)
-                    continue
-                if srcfile == dstfile:
-                    warn('hardlink: %s: Cannot link file to itself' % srcfile)
-                    continue
-                if os.path.isdir(dstfile):
-                    warn('hardlink: %s: Cannot replace directory with file'
-                         % dstfile)
-                    continue
-                if os.path.isfile(dstfile) and os.path.islink(dstfile):
-                    os.remove(dstfile)
-                makedirs(os.path.dirname(dstfile))
-                link(srcfile, dstfile, force)
-        os.chdir(cwd)
+        # Validate source.
+        if not os.path.exists(src):
+            self._err('No such file or directory: %s' % src)
 
-    # Link files.
-    if os.path.isfile(src):
-        if os.path.isdir(dst):
-            err('hardlink: %s: Cannot replace directory with file' % dst)
-        makedirs(os.path.dirname(dst))
-        link(src, dst, force)
+        # Merge directories, link files, overwrite existing files. We don't
+        # want to leak hard links outside the destination (by following
+        # symlinks). Replace directory symlinks with directories, and file
+        # symlinks with hard links. Do not allow files to be replaced with
+        # directories, and vice versa.
+        if os.path.isdir(src):
+            logger.info('Linking directory: %s -> %s' % (src, dst))
 
+            cwd = os.getcwd()
+            logger.debug('Current working directory: %s' % cwd)
 
-def link(src, dst, force=False):
-    try:
-        os.link(src, dst)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
-        if force:
-            os.remove(dst)
+            logger.debug('Changing current working directory: %s' % src)
+            os.chdir(src)
+
+            self._makedirs(dst)
+
+            # Pass a unicode path to `os.walk` to get unicode values back for
+            # `local`, `dirs` and `files`.
+            for local, dirs, files in os.walk(u'.', followlinks=True):
+                logger.debug('Walking directory: %s' % os.path.realpath(
+                    os.path.join(dst, local)))
+
+                # Directories.
+                for d in dirs:
+                    self._makedirs(
+                        os.path.abspath(os.path.join(dst, local, d)))
+
+                # Files.
+                for f in files:
+                    srcfile = os.path.realpath(
+                        os.path.abspath(os.path.join('.', local, f)))
+                    dstfile = os.path.abspath(os.path.join(dst, local, f))
+                    if not os.path.exists(srcfile):
+                        logger.warning(
+                            'No such file or directory: %s' % srcfile)
+                        continue
+                    if srcfile == dstfile:
+                        logger.warning(
+                            'Cannot link file to itself: %s' % srcfile)
+                        continue
+                    self._link(srcfile, dstfile)
+
+            logger.debug('Changing current working directory: %s' % cwd)
+            os.chdir(cwd)
+
+        # Link files.
+        elif os.path.isfile(src):
+            logger.info('Linking file: %s -> %s' % (src, dst))
+            self._link(src, dst)
+
+    def _err(self, *args):
+        """
+        Log error and exit.
+        """
+        logger.error(*args)
+        exit(1)
+
+    def _link(self, src, dst):
+        if os.path.exists(dst):
+            if self.force:
+                self._remove(dst)
+            else:
+                logger.warning('File or directory already exists: %s' % dst)
+                return
+        self._makedirs(os.path.dirname(dst))
+        logger.debug('Linking file: %s -> %s' % (src, dst))
+        if not self.dry_run:
+            os.link(src, dst)
+
+    def _makedirs(self, path):
+        if os.path.isfile(path) or os.path.islink(path):
+            if self.force:
+                self._remove(path)
+            else:
+                logger.warning('File or directory already exists: %s' % path)
+                return False
+        if not os.path.exists(path):
+            # Only log created directories once. In a dry run, this code path
+            # will be executed again for every file within a directory that is
+            # missing from the destination.
+            if path not in self._created_dirs:
+                logger.debug('Creating directory: %s' % path)
+                self._created_dirs.add(path)
+            if not self.dry_run:
+                try:
+                    os.makedirs(path)
+                except OSError as e:
+                    # Check if any intermediate path is a file. Don't complain
+                    # if the directory already exists.
+                    if e.errno not in (errno.EEXIST, errno.ENOTDIR):
+                        raise
+                    if not os.path.isdir(path):
+                        bits = os.path.split(path)
+                        bitpath = ''
+                        for bit in bits:
+                            bitpath = os.path.join(bitpath, bit)
+                            if not os.path.isdir(bitpath):
+                                logger.warning(
+                                    'Cannot replace file with directory: %s' %
+                                    bitpath)
+                            # No need to check any further.
+                            break
+                    return False
+        return True
+
+    def _remove(self, path):
+        # Only log removed directories once. In a dry run, this code path will
+        # be executed again for every file within a directory that is a
+        # symbolic link in the destination.
+        if path not in self._removed:
+            logger.debug('Removing file or directory: %s' % path)
+            self._removed.add(path)
+        if not self.dry_run:
             try:
-                os.link(src, dst)
-            except:
-                print os.path.realpath(src), dst
-                raise
-        else:
-            warn('hardlink: %s: Already exists' % dst)
+                shutil.rmtree(path)
+            except OSError:
+                os.remove(path)
 
 
 def main():
-    if len(sys.argv) not in [3, 4]:
-        err('Usage: %s <src> <dst> [force]' % os.path.basename(sys.argv[0]))
-    hardlink(*sys.argv[1:])
+    # Parse arguments.
+    parser = argparse.ArgumentParser(
+        description='Recursively hard link a file or directory. If the source '
+                    'and destination are both directories, the two will be '
+                    'merged. Directory and file symbolic links in the '
+                    'destination will be replaced with directories or hard '
+                    'links.',
+    )
+    parser.add_argument('src', help='source file or directory')
+    parser.add_argument('dst', help='destination file or directory')
+    parser.add_argument(
+        '-d',
+        '--dry-run',
+        action='store_true',
+        help='simulate results',
+    )
+    parser.add_argument(
+        '-f',
+        '--force',
+        action='store_true',
+        help='overwrite existing files',
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        '-q',
+        '--quiet',
+        action='store_true',
+        help='silence standard output',
+    )
+    group.add_argument(
+        '-v',
+        '--verbose',
+        action='count',
+        default=0,
+        dest='verbosity',
+        help='increase verbosity of standard output for each occurrence, e.g. '
+             '-vv',
+    )
+    args = parser.parse_args()
 
+    # Configure log level with verbosity argument.
+    levels = (
+        # logging.CRITICAL,
+        # logging.ERROR,
+        logging.WARNING,
+        logging.INFO,
+        logging.DEBUG,
+    )
+    try:
+        logger.setLevel(levels[args.verbosity])
+    except IndexError:
+        logger.setLevel(logging.DEBUG)
 
-def warn(stderr):
-    sys.stderr.write('%s\n' % stderr.strip())
-
+    # Silence standard output.
+    stdout = sys.stdout
+    if args.quiet:
+        sys.stdout = open(os.devnull, 'w')
+    # Execute.
+    Command(args.dry_run, args.force)(args.src, args.dst)
+    # Restore standard output.
+    sys.stdout = stdout
 
 if __name__ == '__main__':
     main()
