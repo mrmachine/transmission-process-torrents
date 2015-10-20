@@ -281,7 +281,6 @@ def main():
         logger.setLevel(levels[args.verbosity])
     except IndexError:
         logger.setLevel(logging.DEBUG)
-    hardlink.logger.setLevel(logger.level)
 
     # Dump sample config file to standard output.
     if args.sample_config:
