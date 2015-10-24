@@ -229,35 +229,35 @@ class Command(object):
 def main():
     # Parse arguments.
     parser = argparse.ArgumentParser(
-        description='Hard link downloaded torrents to a post processing '
-                    'directory. Remove processed torrents that have already '
-                    'satisfied their ratio and seed time requirements.',
+        description='Hard links downloaded torrents to a post processing '
+                    'directory and removes them once ratio and seed time '
+                    'requirements have been satisfied.',
     )
     group = parser.add_mutually_exclusive_group()
     parser.add_argument(
         '-c',
         '--config',
         default=CONFIG_PATH,
-        help='path to config file',
+        help='Path to config file. (Default: %(default)s)',
         metavar='PATH',
     )
     parser.add_argument(
         '-d',
         '--dry-run',
         action='store_true',
-        help='simulate results',
+        help='Do not link or remove torrents. Only log operations.',
     )
     group.add_argument(
         '-q',
         '--quiet',
         action='store_true',
-        help='silence standard output',
+        help='Silence standard output.',
     )
     parser.add_argument(
         '-s',
         '--sample-config',
         action='store_true',
-        help='dump sample config to standard output',
+        help='Dump sample config to standard output.',
     )
     group.add_argument(
         '-v',
@@ -265,8 +265,7 @@ def main():
         action='count',
         default=0,
         dest='verbosity',
-        help='increase verbosity of standard output for each occurrence, e.g. '
-             '-vv',
+        help='Increase verbosity for each occurrence.',
     )
     args = parser.parse_args()
 

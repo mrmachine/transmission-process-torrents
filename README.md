@@ -1,42 +1,52 @@
 # Overview
 
-This package provides a `process-torrents` command that will automatically hard
-link downloaded torrents to a post processing directory and finally remove the
-torrent once ratio and seed time requirements have been satisfied.
+This package provides a `process-torrents` command that hard links downloaded
+torrents to a post processing directory and removes them once ratio and seed
+time requirements have been satisfied.
 
-This allows 3rd party program like [CouchPotato] and [SickRage] to then move
-the files from the post processing directory, without removing the torrent from
-Transmission.
+This allows 3rd party programs to then process and remove files from the post
+processing directory, without impacting torrents that are still seeding.
 
 # Installation
 
-Clone the repository and install into a [virtualenv] with `pip`:
+Install from PyPI with `pip`:
 
-    (venv)$ git clone http://mrmachine.net/transmission-process-torrents.git
-    (venv)$ pip install -r transmission-process-torrents/requirements.txt
+    $ pip install transmission-process-torrents
 
 # Configuration
 
-Copy the [config-sample.yaml] file to
-`~/.config/transmission-process-torrents/config.yaml` and edit to suit your
-needs.
+Create and edit a config file from the sample:
 
-Configuration is needed to tell the script:
+    $ mkdir -p ~/.config/transmission-process-torrents
+    $ process-torrents -s > ~/.config/transmission-process-torrents/config.yaml
+
+Configuration includes:
 
   * How to connect to Transmission.
   * Where Transmission is saving downloaded torrents.
-  * Where to hard link downloaded files for post processing.
-  * When to remove a torrent, according to ratio and seed time rules.
+  * Where to hard link downloaded torrents for post processing.
+  * When to remove torrents, by ratio and seed time.
 
-See the comments in the sample file for more information.
+Multiple download and post processing directories can be configured, each with
+their own ratio and seed time. See the comments in the sample file for more
+information.
 
 # Usage
 
-Just run the `process-torrents` command:
+Via the command line script:
 
-    (venv)$ process-torrents
+    $ process-torrents -h
+    usage: process-torrents [-h] [-c PATH] [-d] [-q] [-s] [-v]
 
-[config-sample.yaml]: config-sample.yaml
-[CouchPotato]: https://github.com/RuudBurger/CouchPotatoServer
-[SickRage]: https://github.com/SiCKRAGETV/SickRage
-[virtualenv]: https://virtualenv.pypa.io/en/latest/
+    Hard link downloaded torrents to a post processing directory. Remove processed
+    torrents that have satisfied their ratio and seed time requirements.
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -c PATH, --config PATH
+                            path to config file
+      -d, --dry-run         simulate results
+      -q, --quiet           silence standard output
+      -s, --sample-config   dump sample config to standard output
+      -v, --verbose         increase verbosity of standard output for each
+                            occurrence, e.g. -vv
