@@ -8,13 +8,13 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=[
         'finder_colors',
+        'hardlink',
         'pyyaml',
         'requests',
         'transmission-fluid',
     ],
     entry_points={
         'console_scripts': [
-            'hardlink = hardlink:main',
             'process-torrents = process_torrents:main',
         ],
     },
