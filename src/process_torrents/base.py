@@ -286,7 +286,8 @@ def main():
     # Dump sample config file to standard output.
     if args.sample_config:
         config_path = os.path.join(
-            os.path.dirname(__file__), 'config-sample.yaml')
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            'config-sample.yaml')
         with open(config_path) as file:
             sys.stdout.write(file.read())
 

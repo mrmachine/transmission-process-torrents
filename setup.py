@@ -5,7 +5,10 @@ VERSION = '0.1-dev'
 setuptools.setup(
     name='transmission-process-torrents',
     version=VERSION,
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(where='src'),
+    package_dir={
+        '': 'src',
+    },
     install_requires=[
         'finder_colors',
         'hardlink',
@@ -15,7 +18,7 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts': [
-            'process-torrents = process_torrents:main',
+            'process-torrents = process_torrents.base:main',
         ],
     },
 )
