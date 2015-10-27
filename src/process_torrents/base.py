@@ -49,7 +49,7 @@ class Command(object):
             with open(self.config_path) as file:
                 config = yaml.load(file.read())
         except Exception:
-            self._err('Unable to load config: %s' % config_path)
+            self._err('Unable to load config: %s' % self.config_path)
 
         # Get Transmission client.
         host = config.get('transmission_host', 'localhost')
