@@ -64,6 +64,7 @@ class Command(object):
         # Get Transmission client.
         host = config.get('transmission_host', 'localhost')
         port = config.get('transmission_port', 9091)
+        logger.debug('Connecting to Transmission: %s:%s' % (host, port))
         client = transmission.Transmission(host=host, port=port)
 
         # Get torrents from Transmission.
