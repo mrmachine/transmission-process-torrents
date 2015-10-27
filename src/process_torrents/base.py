@@ -19,8 +19,13 @@ import transmission
 
 import hardlink
 
-# TODO: Move torrents not matching any known torrents directory to an "other"
-#       directory.
+
+# TODO:
+# - Move torrents not matching any known torrents directory to an "other"
+#   directory.
+# - Keep a separate database for each torrents directory, in the torrents
+#   directory, and store processed state for torrent names instead of absolute
+#   paths.
 
 logging.basicConfig(format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -61,6 +66,9 @@ class Command(object):
         except ValueError:
             self._err('Unable to load database: %s' % database_path)
 
+        # Get mapped paths.
+        mapped_paths = config.get('mapped_remote_paths', {}).items()
+
         # Get Transmission client.
         host = config.get('transmission_host', 'localhost')
         port = config.get('transmission_port', 9091)
@@ -89,15 +97,11 @@ class Command(object):
 
         # Hard link or remove completed torrents.
         for torrent in torrents:
-            absolute_path = os.path.join(
+            remote_path = os.path.join(
                 torrent['downloadDir'], torrent['name'])
 
-            # Map remote paths.
-            for remote_path, local_path in \
-                    config.get('mapped_remote_paths', {}).items():
-                if absolute_path.startswith(remote_path):
-                    absolute_path = absolute_path.replace(
-                        remote_path, local_path)
+            # Get local path for remote path.
+            local_path = self.get_local_path(remote_path, mapped_paths)
 
             # Find matching torrents directory.
             for dir_config in config['torrent_dirs']:
@@ -108,14 +112,14 @@ class Command(object):
                 ratio = dir_config.get('ratio')
                 seed_days = dir_config.get('seed_days')
 
-                if absolute_path.startswith(download_dir):
-                    found_torrents.add(absolute_path)
+                if local_path.startswith(download_dir):
+                    found_torrents.add(local_path)
 
                     # Get downloaded and seeding status.
                     downloaded = bool(torrent['percentDone'] == 1)
 
                     # Get processed status.
-                    processed = bool(downloaded and db.get(absolute_path))
+                    processed = bool(downloaded and db.get(remote_path))
 
                     # Get seeding status.
                     seeding = bool(
@@ -127,14 +131,14 @@ class Command(object):
                     # Hard link downloaded torrents to the post processing
                     # directory.
                     if downloaded and not processed:
-                        logger.info('Processing torrent: %s' % absolute_path)
+                        logger.info('Processing torrent: %s' % local_path)
                         destination = os.path.join(
                             post_processing_dir,
-                            os.path.relpath(absolute_path, download_dir),
+                            os.path.relpath(local_path, download_dir),
                         )
-                        link(absolute_path, destination)
+                        link(local_path, destination)
                         if not self.dry_run:
-                            db[absolute_path] = True
+                            db[remote_path] = True
 
                     # Remove processed torrents that have finished seeding.
                     elif processed and not seeding:
@@ -146,13 +150,13 @@ class Command(object):
                                 ids=[torrent['id']],
                                 delete_local_data=True,
                             )
-                            del db[absolute_path]
+                            del db[remote_path]
 
                     else:
                         # Ignore torrents that are still downloading or
                         # seeding.
                         logger.debug(
-                            'Skipping active torrent: %s' % absolute_path)
+                            'Skipping active torrent: %s' % local_path)
 
                     # Log torrent data, regardless of action taken.
                     logger.debug(' - Downloaded: %d%%' % (
@@ -175,7 +179,7 @@ class Command(object):
             else:
                 logger.debug(
                     'Skipping torrent not located in any download directory: '
-                    '%s' % absolute_path)
+                    '%s' % local_path)
 
         # Process orphaned torrent data in download directories.
         for dir_config in config['torrent_dirs']:
@@ -192,54 +196,63 @@ class Command(object):
                 if path.startswith('.'):
                     continue
 
-                absolute_path = os.path.join(download_dir, path)
+                local_path = os.path.join(download_dir, path)
 
                 # Find matching torrent for this path.
                 for found_torrent in found_torrents:
-                    if absolute_path.startswith(found_torrent):
+                    if local_path.startswith(found_torrent):
                         # We found a match. No need to continue.
                         break
 
                 # No matching torrent.
                 else:
 
+                    # Get remote path for local path.
+                    remote_path = self.get_remote_path(
+                        local_path, mapped_paths)
+
                     # Get processed status.
-                    processed = db.get(absolute_path, False)
+                    processed = db.get(remote_path, False)
 
                     # Hard link orphaned files that have not been processed.
                     if not processed:
                         logger.info(
                             'Processing orphaned file or directory: %s' %
-                            absolute_path)
+                            local_path)
                         destination = os.path.join(
                             post_processing_dir,
-                            os.path.relpath(absolute_path, download_dir),
+                            os.path.relpath(local_path, download_dir),
                         )
-                        link(absolute_path, destination)
+                        link(local_path, destination)
                         # No need to add path to database, it would be removed
                         # immediately in the next code block.
 
                     # Remove orphaned files that have been processed.
                     logger.info(
                         'Removing orphaned file or directory: %s' %
-                        absolute_path)
+                        local_path)
                     if not self.dry_run:
                         try:
-                            shutil.rmtree(absolute_path)
+                            shutil.rmtree(local_path)
                         except OSError:
-                            os.remove(absolute_path)
+                            os.remove(local_path)
                         # Remove path from database.
-                        if absolute_path in db:
-                            del db[absolute_path]
+                        if remote_path in db:
+                            del db[remote_path]
 
         # Remove stale records in database. Convert database keys to list to
         # avoid `RuntimeError: dictionary changed size during iteration`.
-        for absolute_path in list(db):
-            if not os.path.exists(absolute_path):
+        for remote_path in list(db):
+
+            # Get local path for remote path.
+            local_path = self.get_local_path(remote_path, mapped_paths)
+
+            # Remove from database.
+            if not os.path.exists(local_path):
                 logger.info(
-                    'Removing stale record from database: %s' % absolute_path)
+                    'Removing stale record from database: %s' % remote_path)
                 if not self.dry_run:
-                    del db[absolute_path]
+                    del db[remote_path]
 
     def _err(self, *args):
         """
@@ -247,6 +260,28 @@ class Command(object):
         """
         logger.error(*args)
         exit(1)
+
+    def get_local_path(self, remote_path, mapped_paths, reverse=False):
+        """
+        Return mapped local path for given remote path.
+        """
+        for remote_prefix, local_prefix in mapped_paths:
+            # Reverse. Return mapped remote path for given local path.
+            if reverse:
+                remote_prefix, local_prefix = local_prefix, remote_prefix
+            if remote_path.startswith(remote_prefix):
+                local_path = remote_path.replace(
+                    remote_prefix, local_prefix)
+                break
+        else:
+            local_path = remote_path
+        return local_path
+
+    def get_remote_path(self, local_path, mapped_paths):
+        """
+        Return mapped remote path for given local path.
+        """
+        return self.get_local_path(local_path, mapped_paths, reverse=True)
 
 
 def main():
