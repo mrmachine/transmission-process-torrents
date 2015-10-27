@@ -148,8 +148,10 @@ class Command(object):
                             del db[absolute_path]
 
                     else:
-                        # Ignore torrents that are still downloading or seeding.
-                        logger.debug('Skipping active torrent: %s' % absolute_path)
+                        # Ignore torrents that are still downloading or
+                        # seeding.
+                        logger.debug(
+                            'Skipping active torrent: %s' % absolute_path)
 
                     # Log torrent data, regardless of action taken.
                     logger.debug(' - Downloaded: %d%%' % (
