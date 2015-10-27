@@ -83,7 +83,7 @@ class Command(object):
 
             # Map remote paths.
             for remote_path, local_path in \
-                    config['mapped_remote_paths'].items():
+                    config.get('mapped_remote_paths', {}).items():
                 if absolute_path.startswith(remote_path):
                     absolute_path = absolute_path.replace(
                         remote_path, local_path)
