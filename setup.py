@@ -22,7 +22,6 @@ setuptools.setup(
         '': 'src',
     },
     install_requires=[
-        'finder_colors',
         'hardlink',
         'pyyaml',
         'requests',

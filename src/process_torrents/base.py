@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 """
 Hard link completed torrents to completed downloads directory for post
-processing. Remove completed torrents based on color label and seed time.
-Remove orphaned torrent data.
+processing. Remove processed torrents when ratio and seed time requirements are
+satisfied. Remove orphaned torrent data.
 """
 
 import argparse
 import datetime
+import jsondict
 import logging
 import os
 import shutil
 import sys
 import yaml
 
-import finder_colors
 import requests
 import transmission
 
@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 CONFIG_PATH = os.path.expandvars(
     '$HOME/.config/transmission-process-torrents/config.yaml')
+DATABASE_PATH = os.path.expandvars(
+    '$HOME/.config/transmission-process-torrents/db.json')
 DAY_SECONDS = datetime.timedelta(days=1).total_seconds()
 
 
@@ -38,8 +40,8 @@ class Command(object):
 
     def __call__(self):
         """
-        Process or remove active and orphaned torrent data based on color
-        label, ratio, and seed time.
+        Process or remove downloaded and orphaned torrents based on ratio and
+        seed time.
         """
 
         link = hardlink.Command(dry_run=self.dry_run, force=True)
@@ -50,6 +52,14 @@ class Command(object):
                 config = yaml.load(file.read())
         except Exception:
             self._err('Unable to load config: %s' % self.config_path)
+
+        # Get JSON database for processed torrent status.
+        database_path = config.get('db', DATABASE_PATH)
+        logger.debug('Loading database: %s' % database_path)
+        try:
+            db = jsondict.JsonDict(database_path, autosave=True)
+        except ValueError:
+            self._err('Unable to load database: %s' % database_path)
 
         # Get Transmission client.
         host = config.get('transmission_host', 'localhost')
@@ -103,10 +113,8 @@ class Command(object):
                     # Get downloaded and seeding status.
                     downloaded = bool(torrent['percentDone'] == 1)
 
-                    # Assume already processed if a color label is set.
-                    processed = bool(
-                        downloaded and
-                        finder_colors.get(absolute_path) != 'none')
+                    # Get processed status.
+                    processed = bool(downloaded and db.get(absolute_path))
 
                     # Get seeding status.
                     seeding = bool(
@@ -125,7 +133,7 @@ class Command(object):
                         )
                         link(absolute_path, destination)
                         if not self.dry_run:
-                            finder_colors.set(absolute_path, 'green')
+                            db[absolute_path] = True
 
                     # Remove processed torrents that have finished seeding.
                     elif processed and not seeding:
@@ -137,6 +145,7 @@ class Command(object):
                                 ids=[torrent['id']],
                                 delete_local_data=True,
                             )
+                            del db[absolute_path]
 
                     else:
                         # Ignore torrents that are still downloading or seeding.
@@ -191,9 +200,8 @@ class Command(object):
                 # No matching torrent.
                 else:
 
-                    # Assume already processed if a color label is set.
-                    processed = bool(
-                        finder_colors.get(absolute_path) != 'none')
+                    # Get processed status.
+                    processed = db.get(absolute_path, False)
 
                     # Hard link orphaned files that have not been processed.
                     if not processed:
@@ -205,8 +213,8 @@ class Command(object):
                             os.path.relpath(absolute_path, download_dir),
                         )
                         link(absolute_path, destination)
-                        if not self.dry_run:
-                            finder_colors.set(absolute_path, 'green')
+                        # No need to add path to database, it would be removed
+                        # immediately in the next code block.
 
                     # Remove orphaned files that have been processed.
                     logger.info(
@@ -217,6 +225,18 @@ class Command(object):
                             shutil.rmtree(absolute_path)
                         except OSError:
                             os.remove(absolute_path)
+                        # Remove path from database.
+                        if absolute_path in db:
+                            del db[absolute_path]
+
+        # Remove stale records in database. Convert database keys to list to
+        # avoid `RuntimeError: dictionary changed size during iteration`.
+        for absolute_path in list(db):
+            if not os.path.exists(absolute_path):
+                logger.info(
+                    'Removing stale record from database: %s' % absolute_path)
+                if not self.dry_run:
+                    del db[absolute_path]
 
     def _err(self, *args):
         """
