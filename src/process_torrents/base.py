@@ -39,9 +39,10 @@ DAY_SECONDS = datetime.timedelta(days=1).total_seconds()
 
 class Command(object):
 
-    def __init__(self, config_path=CONFIG_PATH, dry_run=False):
+    def __init__(self, config_path=CONFIG_PATH, dry_run=False, remove=True):
         self.config_path = config_path
         self.dry_run = dry_run
+        self.remove = remove
 
     def __call__(self):
         """
@@ -142,15 +143,21 @@ class Command(object):
 
                     # Remove processed torrents that have finished seeding.
                     elif processed and not seeding:
-                        logger.info(
-                            'Removing inactive torrent: %s' % torrent['name'])
-                        if not self.dry_run:
-                            client(
-                                'torrent-remove',
-                                ids=[torrent['id']],
-                                delete_local_data=True,
-                            )
-                            del db[remote_path]
+                        if not self.remove:
+                            logger.info(
+                                'Not removing inactive torrent: %s' %
+                                torrent['name'])
+                        else:
+                            logger.info(
+                                'Removing inactive torrent: %s' %
+                                torrent['name'])
+                            if not self.dry_run:
+                                client(
+                                    'torrent-remove',
+                                    ids=[torrent['id']],
+                                    delete_local_data=True,
+                                )
+                                del db[remote_path]
 
                     else:
                         # Ignore torrents that are still downloading or
@@ -312,6 +319,13 @@ def main():
         help='Silence standard output.',
     )
     parser.add_argument(
+        '-R',
+        '--no-remove',
+        action='store_false',
+        dest='remove',
+        help='Do not remove processed torrents that have finished seeding.',
+    )
+    parser.add_argument(
         '-s',
         '--sample-config',
         action='store_true',
@@ -354,7 +368,7 @@ def main():
         if args.quiet:
             sys.stdout = open(os.devnull, 'w')
         # Execute.
-        Command(args.config, args.dry_run)()
+        Command(args.config, args.dry_run, args.remove)()
         # Restore standard output.
         sys.stdout = stdout
 
