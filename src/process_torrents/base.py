@@ -144,7 +144,7 @@ class Command(object):
                     # Remove processed torrents that have finished seeding.
                     elif processed and not seeding:
                         if not self.remove:
-                            logger.info(
+                            logger.debug(
                                 'Not removing inactive torrent: %s' %
                                 torrent['name'])
                         else:
