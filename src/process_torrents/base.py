@@ -256,7 +256,7 @@ class Command(object):
 
             # Remove from database.
             if not os.path.exists(local_path):
-                logger.info(
+                logger.debug(
                     'Removing stale record from database: %s' % remote_path)
                 if not self.dry_run:
                     del db[remote_path]
