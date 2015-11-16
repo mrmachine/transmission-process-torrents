@@ -19,7 +19,6 @@ import transmission
 
 import hardlink
 
-
 # TODO:
 # - Move torrents not matching any known torrents directory to an "other"
 #   directory.
