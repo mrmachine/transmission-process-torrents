@@ -22,7 +22,9 @@ setuptools.setup(
         '': 'src',
     },
     install_requires=[
+        'asjson<2.0',  # `.loads()` method removed in 2.0
         'hardlink',
+        'jsondict',
         'pyyaml',
         'requests',
         'transmission-fluid',
