@@ -192,6 +192,10 @@ class Command(object):
             download_dir = dir_config['download_dir']
             post_processing_dir = dir_config['post_processing_dir']
 
+            # Skip download directories that don't exist.
+            if not os.path.isdir(download_dir):
+                continue
+
             # Compare every file and directory in the download directory to
             # previously found torrents. Remove anything already processed and
             # not belonging to a found torrent. Hard link everything else to
